@@ -120,7 +120,7 @@
   <div class="comuna-name" id="comuna">Toca el boton para detectar tu barrio</div>
   <div class="coords" id="coords"></div>
   <div class="status" id="status"></div>
-  <button class="btn" id="detectBtn" onclick="detect()">Detectar mi barrio</button>
+  <button class="btn" id="detectBtn" onclick="startTracking()">Iniciar rastreo</button>
   <div class="accuracy" id="accuracy"></div>
   <div class="nearby" id="nearby" style="display:none">
     <div class="nearby-title">Barrios cercanos</div>
@@ -194,98 +194,112 @@ function findBarrio(lat, lng) {
   return { current, nearby };
 }
 
-async function detect() {
-  const btn = document.getElementById('detectBtn');
+let watchId = null;
+let tracking = false;
+
+function updateUI(pos) {
+  const { latitude, longitude, accuracy } = pos.coords;
   const status = document.getElementById('status');
   const barrioEl = document.getElementById('barrio');
   const comunaEl = document.getElementById('comuna');
   const coordsEl = document.getElementById('coords');
   const iconEl = document.getElementById('icon');
   const accuracyEl = document.getElementById('accuracy');
+  const nearbyEl = document.getElementById('nearby');
+  const nearbyList = document.getElementById('nearbyList');
+
+  coordsEl.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+  accuracyEl.textContent = `Precision: ${Math.round(accuracy)}m`;
+
+  if (!barrios) return;
+
+  const { current, nearby } = findBarrio(latitude, longitude);
+
+  if (current) {
+    if (current.approximate) {
+      barrioEl.textContent = `~${current.name}`;
+      comunaEl.textContent = current.comuna || 'Cerca (~' + current.distance + 'm)';
+      status.className = 'status loading';
+      status.textContent = 'Barrio aproximado';
+      iconEl.textContent = '📍';
+    } else {
+      barrioEl.textContent = current.name;
+      comunaEl.textContent = current.comuna || 'Cali';
+      status.className = 'status';
+      status.textContent = 'En tiempo real';
+      iconEl.textContent = '✅';
+    }
+  } else {
+    barrioEl.textContent = 'No encontrado';
+    comunaEl.textContent = 'Puede que no estes en Cali';
+    status.className = 'status error';
+    status.textContent = 'Fuera del area de cobertura';
+    iconEl.textContent = '❌';
+  }
+
+  if (nearby.length > 0) {
+    nearbyEl.style.display = 'block';
+    nearbyList.innerHTML = nearby.map(b => {
+      const dist = b.distance < 1000
+        ? `${b.distance}m`
+        : `${(b.distance / 1000).toFixed(1)}km`;
+      return `<div class="nearby-item">
+        <span class="nearby-name">${b.name}</span>
+        <span class="nearby-dist">${dist}</span>
+      </div>`;
+    }).join('');
+  }
+}
+
+async function startTracking() {
+  const btn = document.getElementById('detectBtn');
+  const status = document.getElementById('status');
+  const iconEl = document.getElementById('icon');
+
+  if (tracking) {
+    navigator.geolocation.clearWatch(watchId);
+    tracking = false;
+    btn.textContent = 'Iniciar rastreo';
+    status.className = 'status';
+    status.textContent = 'Rastreo detenido';
+    iconEl.textContent = '📍';
+    return;
+  }
 
   if (!barrios) {
     await loadBarrios();
     if (!barrios) return;
   }
 
-  btn.disabled = true;
-  btn.textContent = 'Detectando...';
-  status.className = 'status loading';
-  status.textContent = 'Obteniendo GPS...';
-  iconEl.textContent = '🔄';
-
   if (!navigator.geolocation) {
     status.className = 'status error';
-    status.textContent = 'GPS no disponible en este navegador';
-    btn.disabled = false;
-    btn.textContent = 'Reintentar';
+    status.textContent = 'GPS no disponible';
     return;
   }
 
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      const { latitude, longitude, accuracy } = pos.coords;
-      coordsEl.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
-      accuracyEl.textContent = `Precision: ${Math.round(accuracy)}m`;
+  status.className = 'status loading';
+  status.textContent = 'Conectando GPS...';
+  iconEl.textContent = '🔄';
+  btn.textContent = 'Detener';
+  tracking = true;
 
-      const { current, nearby } = findBarrio(latitude, longitude);
-      const nearbyEl = document.getElementById('nearby');
-      const nearbyList = document.getElementById('nearbyList');
-
-      if (current) {
-        if (current.approximate) {
-          barrioEl.textContent = `~${current.name}`;
-          comunaEl.textContent = current.comuna || 'Cerca (~' + current.distance + 'm)';
-          status.className = 'status loading';
-          status.textContent = 'Barrio aproximado';
-          iconEl.textContent = '📍';
-        } else {
-          barrioEl.textContent = current.name;
-          comunaEl.textContent = current.comuna || 'Cali';
-          status.className = 'status';
-          status.textContent = 'Barrio detectado';
-          iconEl.textContent = '✅';
-        }
-      } else {
-        barrioEl.textContent = 'No encontrado';
-        comunaEl.textContent = 'Puede que no estes en Cali';
-        status.className = 'status error';
-        status.textContent = 'Fuera del area de cobertura';
-        iconEl.textContent = '❌';
-      }
-
-      // Show nearby barrios
-      if (nearby.length > 0) {
-        nearbyEl.style.display = 'block';
-        nearbyList.innerHTML = nearby.map(b => {
-          const dist = b.distance < 1000
-            ? `${b.distance}m`
-            : `${(b.distance / 1000).toFixed(1)}km`;
-          return `<div class="nearby-item">
-            <span class="nearby-name">${b.name}</span>
-            <span class="nearby-dist">${dist}</span>
-          </div>`;
-        }).join('');
-      }
-
-      btn.disabled = false;
-      btn.textContent = 'Detectar de nuevo';
-    },
+  watchId = navigator.geolocation.watchPosition(
+    updateUI,
     (err) => {
       status.className = 'status error';
       status.textContent = err.code === 1 ? 'Permiso GPS denegado' :
                           err.code === 2 ? 'GPS no disponible' :
                           'Timeout GPS';
       iconEl.textContent = '❌';
-      btn.disabled = false;
-      btn.textContent = 'Reintentar';
+      tracking = false;
+      btn.textContent = 'Iniciar rastreo';
     },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
   );
 }
 
-// Preload barrios on page load
-loadBarrios();
+// Preload barrios and auto-start tracking
+loadBarrios().then(() => startTracking());
 </script>
 </body>
 </html>

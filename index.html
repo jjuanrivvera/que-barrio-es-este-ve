@@ -74,6 +74,37 @@
     color: #414868;
     margin-top: 8px;
   }
+  .nearby {
+    margin-top: 20px;
+    text-align: left;
+    border-top: 1px solid #2a2a3a;
+    padding-top: 16px;
+  }
+  .nearby-title {
+    font-size: 14px;
+    color: #565f89;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .nearby-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #1a1b26;
+  }
+  .nearby-name {
+    font-size: 15px;
+    color: #c0caf5;
+  }
+  .nearby-dist {
+    font-size: 13px;
+    color: #7aa2f7;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    white-space: nowrap;
+    margin-left: 12px;
+  }
   .footer {
     margin-top: 24px;
     font-size: 12px;
@@ -91,6 +122,10 @@
   <div class="status" id="status"></div>
   <button class="btn" id="detectBtn" onclick="detect()">Detectar mi barrio</button>
   <div class="accuracy" id="accuracy"></div>
+  <div class="nearby" id="nearby" style="display:none">
+    <div class="nearby-title">Barrios cercanos</div>
+    <div id="nearbyList"></div>
+  </div>
 </div>
 <div class="footer">331 barrios de Cali | Datos: OpenStreetMap</div>
 
@@ -115,35 +150,48 @@ async function loadBarrios() {
 }
 
 function findBarrio(lat, lng) {
-  if (!barrios) return null;
+  if (!barrios) return { current: null, nearby: [] };
   const point = turf.point([lng, lat]);
+  let current = null;
 
-  for (const feature of barrios.features) {
-    try {
-      if (turf.booleanPointInPolygon(point, feature)) {
-        return feature.properties;
-      }
-    } catch (e) {
-      continue;
-    }
-  }
-
-  // Fallback: find nearest barrio centroid
-  let nearest = null;
-  let minDist = Infinity;
+  // Calculate distance to all barrios
+  const distances = [];
   for (const feature of barrios.features) {
     try {
       const centroid = turf.centroid(feature);
-      const dist = turf.distance(point, centroid);
-      if (dist < minDist) {
-        minDist = dist;
-        nearest = { ...feature.properties, approximate: true, distance: Math.round(dist * 1000) };
+      const dist = turf.distance(point, centroid, { units: 'meters' });
+      const isInside = turf.booleanPointInPolygon(point, feature);
+
+      if (isInside && !current) {
+        current = feature.properties;
       }
+
+      distances.push({
+        name: feature.properties.name,
+        comuna: feature.properties.comuna || '',
+        distance: Math.round(dist),
+        isInside
+      });
     } catch (e) {
       continue;
     }
   }
-  return nearest;
+
+  distances.sort((a, b) => a.distance - b.distance);
+
+  // If no exact match, use nearest as approximate
+  if (!current && distances.length > 0) {
+    const n = distances[0];
+    current = { name: n.name, comuna: n.comuna, approximate: true, distance: n.distance };
+  }
+
+  // Get 5 nearest that are NOT the current barrio
+  const currentName = current ? current.name : '';
+  const nearby = distances
+    .filter(d => d.name !== currentName)
+    .slice(0, 5);
+
+  return { current, nearby };
 }
 
 async function detect() {
@@ -180,18 +228,20 @@ async function detect() {
       coordsEl.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
       accuracyEl.textContent = `Precision: ${Math.round(accuracy)}m`;
 
-      const result = findBarrio(latitude, longitude);
+      const { current, nearby } = findBarrio(latitude, longitude);
+      const nearbyEl = document.getElementById('nearby');
+      const nearbyList = document.getElementById('nearbyList');
 
-      if (result) {
-        if (result.approximate) {
-          barrioEl.textContent = `~${result.name}`;
-          comunaEl.textContent = result.comuna || 'Cerca (~' + result.distance + 'm)';
+      if (current) {
+        if (current.approximate) {
+          barrioEl.textContent = `~${current.name}`;
+          comunaEl.textContent = current.comuna || 'Cerca (~' + current.distance + 'm)';
           status.className = 'status loading';
-          status.textContent = 'Barrio aproximado (no estas dentro de un poligono)';
+          status.textContent = 'Barrio aproximado';
           iconEl.textContent = '📍';
         } else {
-          barrioEl.textContent = result.name;
-          comunaEl.textContent = result.comuna || 'Cali';
+          barrioEl.textContent = current.name;
+          comunaEl.textContent = current.comuna || 'Cali';
           status.className = 'status';
           status.textContent = 'Barrio detectado';
           iconEl.textContent = '✅';
@@ -202,6 +252,20 @@ async function detect() {
         status.className = 'status error';
         status.textContent = 'Fuera del area de cobertura';
         iconEl.textContent = '❌';
+      }
+
+      // Show nearby barrios
+      if (nearby.length > 0) {
+        nearbyEl.style.display = 'block';
+        nearbyList.innerHTML = nearby.map(b => {
+          const dist = b.distance < 1000
+            ? `${b.distance}m`
+            : `${(b.distance / 1000).toFixed(1)}km`;
+          return `<div class="nearby-item">
+            <span class="nearby-name">${b.name}</span>
+            <span class="nearby-dist">${dist}</span>
+          </div>`;
+        }).join('');
       }
 
       btn.disabled = false;

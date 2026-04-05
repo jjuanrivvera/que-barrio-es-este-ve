@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#1a1b26">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <title>¿Que barrio es este ve?</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -296,6 +299,11 @@ async function startTracking() {
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
   );
+}
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
 // Preload barrios and auto-start tracking

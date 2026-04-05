@@ -1,0 +1,25 @@
+{
+  "name": "¿Que barrio es este ve?",
+  "short_name": "Barrio ve?",
+  "description": "Detecta en que barrio de Cali estas en tiempo real",
+  "start_url": "/que-barrio-es-este-ve/",
+  "scope": "/que-barrio-es-este-ve/",
+  "display": "standalone",
+  "background_color": "#1a1b26",
+  "theme_color": "#1a1b26",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

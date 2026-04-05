@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1a1b26">
+<title>Barrio Cali</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #1a1b26;
+    color: #c0caf5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .card {
+    background: #24283b;
+    border-radius: 20px;
+    padding: 40px 30px;
+    text-align: center;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+  .barrio-name {
+    font-size: 32px;
+    font-weight: 700;
+    color: #7aa2f7;
+    margin: 20px 0 8px;
+    line-height: 1.2;
+  }
+  .comuna-name {
+    font-size: 18px;
+    color: #565f89;
+    margin-bottom: 24px;
+  }
+  .coords {
+    font-size: 13px;
+    color: #414868;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    margin-bottom: 20px;
+  }
+  .status {
+    font-size: 16px;
+    color: #9ece6a;
+    margin: 16px 0;
+  }
+  .status.error { color: #f7768e; }
+  .status.loading { color: #e0af68; }
+  .btn {
+    background: #7aa2f7;
+    color: #1a1b26;
+    border: none;
+    border-radius: 12px;
+    padding: 14px 32px;
+    font-size: 18px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    margin-top: 16px;
+    transition: opacity 0.2s;
+  }
+  .btn:active { opacity: 0.7; }
+  .btn:disabled { background: #414868; cursor: not-allowed; }
+  .icon { font-size: 48px; margin-bottom: 8px; }
+  .accuracy {
+    font-size: 12px;
+    color: #414868;
+    margin-top: 8px;
+  }
+  .footer {
+    margin-top: 24px;
+    font-size: 12px;
+    color: #414868;
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="icon" id="icon">📍</div>
+  <div class="barrio-name" id="barrio">Barrio Cali</div>
+  <div class="comuna-name" id="comuna">Toca el boton para detectar tu barrio</div>
+  <div class="coords" id="coords"></div>
+  <div class="status" id="status"></div>
+  <button class="btn" id="detectBtn" onclick="detect()">Detectar mi barrio</button>
+  <div class="accuracy" id="accuracy"></div>
+</div>
+<div class="footer">331 barrios de Cali | Datos: OpenStreetMap</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
+<script>
+let barrios = null;
+
+async function loadBarrios() {
+  const status = document.getElementById('status');
+  status.className = 'status loading';
+  status.textContent = 'Cargando barrios...';
+
+  try {
+    const resp = await fetch('barrios.geojson');
+    barrios = await resp.json();
+    status.className = 'status';
+    status.textContent = `${barrios.features.length} barrios cargados`;
+  } catch (e) {
+    status.className = 'status error';
+    status.textContent = 'Error cargando barrios: ' + e.message;
+  }
+}
+
+function findBarrio(lat, lng) {
+  if (!barrios) return null;
+  const point = turf.point([lng, lat]);
+
+  for (const feature of barrios.features) {
+    try {
+      if (turf.booleanPointInPolygon(point, feature)) {
+        return feature.properties;
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+
+  // Fallback: find nearest barrio centroid
+  let nearest = null;
+  let minDist = Infinity;
+  for (const feature of barrios.features) {
+    try {
+      const centroid = turf.centroid(feature);
+      const dist = turf.distance(point, centroid);
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = { ...feature.properties, approximate: true, distance: Math.round(dist * 1000) };
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+  return nearest;
+}
+
+async function detect() {
+  const btn = document.getElementById('detectBtn');
+  const status = document.getElementById('status');
+  const barrioEl = document.getElementById('barrio');
+  const comunaEl = document.getElementById('comuna');
+  const coordsEl = document.getElementById('coords');
+  const iconEl = document.getElementById('icon');
+  const accuracyEl = document.getElementById('accuracy');
+
+  if (!barrios) {
+    await loadBarrios();
+    if (!barrios) return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Detectando...';
+  status.className = 'status loading';
+  status.textContent = 'Obteniendo GPS...';
+  iconEl.textContent = '🔄';
+
+  if (!navigator.geolocation) {
+    status.className = 'status error';
+    status.textContent = 'GPS no disponible en este navegador';
+    btn.disabled = false;
+    btn.textContent = 'Reintentar';
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const { latitude, longitude, accuracy } = pos.coords;
+      coordsEl.textContent = `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+      accuracyEl.textContent = `Precision: ${Math.round(accuracy)}m`;
+
+      const result = findBarrio(latitude, longitude);
+
+      if (result) {
+        if (result.approximate) {
+          barrioEl.textContent = `~${result.name}`;
+          comunaEl.textContent = result.comuna || 'Cerca (~' + result.distance + 'm)';
+          status.className = 'status loading';
+          status.textContent = 'Barrio aproximado (no estas dentro de un poligono)';
+          iconEl.textContent = '📍';
+        } else {
+          barrioEl.textContent = result.name;
+          comunaEl.textContent = result.comuna || 'Cali';
+          status.className = 'status';
+          status.textContent = 'Barrio detectado';
+          iconEl.textContent = '✅';
+        }
+      } else {
+        barrioEl.textContent = 'No encontrado';
+        comunaEl.textContent = 'Puede que no estes en Cali';
+        status.className = 'status error';
+        status.textContent = 'Fuera del area de cobertura';
+        iconEl.textContent = '❌';
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Detectar de nuevo';
+    },
+    (err) => {
+      status.className = 'status error';
+      status.textContent = err.code === 1 ? 'Permiso GPS denegado' :
+                          err.code === 2 ? 'GPS no disponible' :
+                          'Timeout GPS';
+      iconEl.textContent = '❌';
+      btn.disabled = false;
+      btn.textContent = 'Reintentar';
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+}
+
+// Preload barrios on page load
+loadBarrios();
+</script>
+</body>
+</html>

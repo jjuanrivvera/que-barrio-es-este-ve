@@ -1,7 +1,7 @@
 {
   "name": "¿Que barrio es este ve?",
   "short_name": "Barrio ve?",
-  "description": "Detecta en que barrio de Cali estas en tiempo real",
+  "description": "Detecta en que barrio de Colombia estas en tiempo real",
   "start_url": "/que-barrio-es-este-ve/",
   "scope": "/que-barrio-es-este-ve/",
   "display": "standalone",

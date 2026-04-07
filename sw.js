@@ -1,8 +1,8 @@
-const CACHE_NAME = 'barrio-v1';
+const CACHE_NAME = 'barrio-v2';
 const ASSETS = [
   '/que-barrio-es-este-ve/',
   '/que-barrio-es-este-ve/index.html',
-  '/que-barrio-es-este-ve/barrios.geojson',
+  '/que-barrio-es-este-ve/barrios-colombia.geojson',
   '/que-barrio-es-este-ve/manifest.json',
   '/que-barrio-es-este-ve/icons/icon-192.png',
   '/que-barrio-es-este-ve/icons/icon-512.png',

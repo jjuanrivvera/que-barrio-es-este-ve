@@ -130,7 +130,7 @@
     <div id="nearbyList"></div>
   </div>
 </div>
-<div class="footer">¿Que barrio es este ve? | 331 barrios de Cali | Datos: OpenStreetMap</div>
+<div class="footer">¿Que barrio es este ve? | 2,137 barrios en Colombia | Datos: OpenStreetMap + datos.gov.co</div>
 
 <script src="https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"></script>
 <script>
@@ -142,7 +142,7 @@ async function loadBarrios() {
   status.textContent = 'Cargando barrios...';
 
   try {
-    const resp = await fetch('barrios.geojson');
+    const resp = await fetch('barrios-colombia.geojson');
     barrios = await resp.json();
     status.className = 'status';
     status.textContent = `${barrios.features.length} barrios cargados`;
